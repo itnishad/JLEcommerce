@@ -1,0 +1,137 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id            String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email         String         @unique @db.VarChar(255)
+  name          String         @db.VarChar(255)
+  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt     DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  carts         Cart[]
+  couponUsages  CouponUsage[]
+
+  @@map("users")
+}
+
+model Product {
+  id              String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name            String           @db.VarChar(255)
+  description     String?          @db.Text
+  price           Decimal          @db.Decimal(10, 2)
+  stockQuantity   Int              @default(0) @map("stock_quantity")
+  isActive        Boolean          @default(true) @map("is_active")
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt       DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  cartItems       CartItem[]
+  couponProducts  CouponProduct[]
+
+  @@map("products")
+}
+
+model Cart {
+  id          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String        @map("user_id") @db.Uuid
+  status      String        @default("active") @db.VarChar(50)
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt   DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cartItems   CartItem[]
+  cartCoupons CartCoupon[]
+  couponUsages CouponUsage[]
+
+  @@unique([userId, status])
+  @@map("carts")
+}
+
+model CartItem {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  cartId          String   @map("cart_id") @db.Uuid
+  productId       String   @map("product_id") @db.Uuid
+  quantity        Int
+  priceAtAddition Decimal  @map("price_at_addition") @db.Decimal(10, 2)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  cart            Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product         Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([cartId, productId])
+  @@map("cart_items")
+}
+
+model Coupon {
+  id                 String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code               String           @unique @db.VarChar(50)
+  description        String?          @db.Text
+  discountType       String           @map("discount_type") @db.VarChar(20)
+  discountValue      Decimal          @map("discount_value") @db.Decimal(10, 2)
+  maxDiscountAmount  Decimal?         @map("max_discount_amount") @db.Decimal(10, 2)
+  isAutoApplied      Boolean          @default(false) @map("is_auto_applied")
+  startTime          DateTime         @map("start_time") @db.Timestamp(6)
+  expiryTime         DateTime         @map("expiry_time") @db.Timestamp(6)
+  minCartItems       Int              @default(0) @map("min_cart_items")
+  minTotalPrice      Decimal          @default(0) @map("min_total_price") @db.Decimal(10, 2)
+  maxTotalUses       Int?             @map("max_total_uses")
+  maxUsesPerUser     Int?             @map("max_uses_per_user")
+  currentTotalUses   Int              @default(0) @map("current_total_uses")
+  isActive           Boolean          @default(true) @map("is_active")
+  createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt          DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  couponProducts     CouponProduct[]
+  couponUsages       CouponUsage[]
+  cartCoupons        CartCoupon[]
+
+  @@map("coupons")
+}
+
+model CouponProduct {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  couponId  String   @map("coupon_id") @db.Uuid
+  productId String   @map("product_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  coupon    Coupon   @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([couponId, productId])
+  @@map("coupon_products")
+}
+
+model CouponUsage {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  couponId       String   @map("coupon_id") @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  cartId         String   @map("cart_id") @db.Uuid
+  discountAmount Decimal  @map("discount_amount") @db.Decimal(10, 2)
+  usedAt         DateTime @default(now()) @map("used_at") @db.Timestamp(6)
+  coupon         Coupon   @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cart           Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+
+  @@map("coupon_usages")
+}
+
+model CartCoupon {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  cartId         String   @map("cart_id") @db.Uuid
+  couponId       String   @map("coupon_id") @db.Uuid
+  discountAmount Decimal  @map("discount_amount") @db.Decimal(10, 2)
+  isAutoApplied  Boolean  @default(false) @map("is_auto_applied")
+  appliedAt      DateTime @default(now()) @map("applied_at") @db.Timestamp(6)
+  cart           Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  coupon         Coupon   @relation(fields: [couponId], references: [id], onDelete: Cascade)
+
+  @@unique([cartId, couponId])
+  @@map("cart_coupons")
+}
