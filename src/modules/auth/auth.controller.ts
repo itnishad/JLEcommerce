@@ -3,7 +3,7 @@ import { ZodValidationPipe } from '../../pipes/validation.pipe';
 import { type registerDto, registerSchema } from './dto/register.dto';
 import { AuthService } from './auth.service';
 import { AuthGuard } from '@nestjs/passport';
-import { requestWithUser } from './decorators/user.decorator';
+import { requestWithUser } from '../../decorators/user.decorator';
 import {type User} from '../../../generated/prisma/client'
 
 @Controller('auth')
