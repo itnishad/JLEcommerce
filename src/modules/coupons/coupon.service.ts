@@ -7,9 +7,9 @@ import { max } from 'rxjs';
 export class CouponService {
     constructor(private prisma: DatabaseService) { }
 
-    async validateCoupon(code: string, userId: string, cart: any) {
-        const coupon = await this.prisma.coupon.findUnique({
-            where: { code },
+    async getCoupon(code: string){
+        return this.prisma.coupon.findUnique({
+            where: {code},
             include: {
                 couponProducts: {
                     include: {
@@ -17,7 +17,11 @@ export class CouponService {
                     }
                 }
             }
-        });
+        })
+    }
+
+    async validateCoupon(code: string, userId: string, cart: any) {
+        const coupon = await this.getCoupon(code)
 
         if (!coupon) {
             throw new NotFoundException('Coupon not found');
@@ -72,7 +76,7 @@ export class CouponService {
         // Product-specific restrictions (coupon applies only to certain products).
         if (coupon.couponProducts.length > 0) {
             const couponProductIds = coupon.couponProducts.map((p) => p.productId);
-            const hasEligibleProduct = cart.items.some((item) => couponProductIds.includes(item.productId));
+            const hasEligibleProduct = cart.cartItems.some((item) => couponProductIds.includes(item.productId));
 
             if (!hasEligibleProduct) {
                 throw new BadRequestException(`Coupon is not applicable to products in your cart`);
@@ -100,9 +104,12 @@ export class CouponService {
 
     }
 
-    async removeCouponFromCart(id: string) {
+    async removeCouponFromCart(cartId: string, couponId) {
         return this.prisma.cartCoupon.delete({
-            where: { id }
+            where: { cartId_couponId: {
+                cartId,
+                couponId
+            } }
         })
     }
 

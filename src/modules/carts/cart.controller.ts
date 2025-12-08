@@ -19,11 +19,10 @@ export class CartController {
     }
 
     @Post('items')
-    @UsePipes(new ZodValidationPipe(addItemSchema))
     async addItem(
-        @requestWithUser() user: User,
-        @Body() addItemDto: AddItemDto
+        @Body(new ZodValidationPipe(addItemSchema)) addItemDto: AddItemDto,
+        @requestWithUser() user: User
     ) {
-        return 'Ok'
+        return this.cartService.addItem(user.id, addItemDto.productId, addItemDto.quantity)
     }
 }

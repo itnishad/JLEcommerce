@@ -58,6 +58,16 @@ export class CartRepository {
     })
   }
 
+  async findCartItemById(itemId: string) {
+    return this.prisma.cartItem.findUnique({
+      where: { id: itemId },
+      include: {
+        cart: true,
+        product: true
+      }
+    })
+  }
+
   async addItemToCart(cartId: string, productId: string, quantity: number, price: number) {
     return this.prisma.cartItem.upsert({
       where: {
@@ -103,4 +113,21 @@ export class CartRepository {
       },
     })
   }
+
+  async updateCartItem(itemId: string, quantity: number) {
+    return this.prisma.cartItem.update({
+      where: { id: itemId },
+      data: { quantity },
+      include: {
+        product: true,
+      }
+    })
+  }
+  
+  async removeCartItem(itemId: string) {
+    return this.prisma.cartItem.delete({
+      where: { id: itemId },
+    });
+  }
+
 }
