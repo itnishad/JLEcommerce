@@ -72,13 +72,18 @@ export class CartService {
 
         const updatedItem = await this.cartRepository.updateCartItem(itemId, quantity);
 
+        await this.revalidateAppliedCoupons(userId, cartItem.cartId)
+
         await this.recalculateCartCoupons(cartItem.cartId);
 
         const autoAppliedCoupons = await this.applyAutoApplyCoupons(userId, cartItem.cartId);
 
         const updatedCart = await this.cartRepository.findCartById(cartItem.cartId);
 
-        return this.formatCartResponse(updatedCart, userId)
+        return {
+            cartItem: updatedItem,
+            cart: await this.formatCartResponse(updatedCart, userId)
+        }
 
     }
 
@@ -93,6 +98,8 @@ export class CartService {
         }
 
         await this.cartRepository.removeCartItem(itemId);
+
+        await this.revalidateAppliedCoupons(userId, cartItem.cartId);
 
         // Recalculate cart with coupons
         await this.recalculateCartCoupons(cartItem.cartId);
@@ -194,7 +201,7 @@ export class CartService {
         return cartItems.filter((item) => eligibleProductIds.includes(item.productId))
     }
 
-    async applyAutoApplyCoupons(userId: string, cartId: string) {
+    private async applyAutoApplyCoupons(userId: string, cartId: string) {
         const cart = await this.cartRepository.findCartById(cartId)
 
         if (!cart) return []
@@ -216,5 +223,71 @@ export class CartService {
         }
 
         return appliedCoupons
+    }
+
+    private async revalidateAppliedCoupons(userId: string, cardId: string) {
+        const cart = await this.cartRepository.findCartById(cardId);
+
+        if (!cart || cart.cartCoupons.length === 0) return []
+
+        const removeCoutpons: unknown[] = []
+
+        for (const cartCoupon of cart.cartCoupons) {
+            const coupon = cartCoupon.coupon
+            try {
+                // Validate basic rules
+                const now = new Date();
+
+                if (!coupon.isActive) {
+                    throw new Error('Coupon is no longer active');
+                }
+
+                if (now < coupon.startTime) {
+                    throw new Error('Coupon is not yet valid');
+                }
+
+                if (now > coupon.expiryTime) {
+                    throw new Error('Coupon has expired');
+                }
+
+                // Validate min cart items
+                const cartItemCount = cart.cartItems.reduce((sum, item) => sum + item.quantity, 0);
+                if (cartItemCount < coupon.minCartItems) {
+                    throw new Error(`Minimum ${coupon.minCartItems} items required`);
+                }
+
+                // Validate min total price (check eligible items only)
+                const eligibleItems = await this.getEligibleItemsForCoupon(coupon, cart.cartItems);
+                const eligibleSubtotal = eligibleItems.reduce((sum, item) => sum + Number(item.priceAtAddition) * item.quantity, 0)
+
+                if (eligibleSubtotal < Number(coupon.minTotalPrice)) {
+                    throw new Error(`Minimum cart value of ${coupon.minTotalPrice} required`);
+                }
+
+                // Validate product restrictions - at least one eligible product
+                if (coupon.couponProducts && coupon.couponProducts.length > 0) {
+                    const couponProductIds = coupon.couponProducts.map((p) => p.productId);
+                    const hasEligibleProduct = cart.cartItems.some((item) =>
+                        couponProductIds.includes(item.productId),
+                    );
+
+                    if (!hasEligibleProduct) {
+                        throw new Error('No eligible products in cart');
+                    }
+                }
+
+                // If we get here, coupon is still valid - continue to next
+
+            } catch (error) {
+                await this.cartRepository.removeCouponFromCart(cartCoupon.cartId, cartCoupon.couponId)
+                removeCoutpons.push({
+                    id: coupon.id,
+                    code: coupon.code,
+                    reason: error.message,
+                });
+            }
+        }
+
+        return removeCoutpons
     }
 }

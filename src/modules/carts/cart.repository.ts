@@ -130,4 +130,15 @@ export class CartRepository {
     });
   }
 
+  async removeCouponFromCart(cartId: string, couponId: string) {
+    return this.prisma.cartCoupon.delete({
+      where: {
+        cartId_couponId: {
+          cartId,
+          couponId,
+        },
+      },
+    });
+  }
+
 }
