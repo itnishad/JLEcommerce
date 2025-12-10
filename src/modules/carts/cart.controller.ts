@@ -4,8 +4,9 @@ import { AuthGuard } from '@nestjs/passport';
 import { requestWithUser } from '../../decorators/user.decorator';
 import { type User } from '../../../generated/prisma/client'
 import { type AddItemDto, addItemSchema } from './dto/addItem.dto';
-import { ZodValidationPipe } from 'src/pipes/validation.pipe';
+import { ZodValidationPipe } from '../../pipes/validation.pipe';
 import { type UpdateItemDto, updateItemSchema } from './dto/updateItem.dto';
+import { type applyCouponDto, applyCouponSchema } from './dto/applyCoupon.dto';
 
 @Controller('cart')
 @UseGuards(AuthGuard('jwt'))
@@ -47,9 +48,20 @@ export class CartController {
         return {
             success: true,
             message: 'Item removed from cart',
-            data: cart ,
+            data: cart,
         };
     }
 
+    @Post('coupons/apply')
+    async applyCoupon(@Body(new ZodValidationPipe(applyCouponSchema)) applyCouponDto: applyCouponDto, @requestWithUser() user: User) {
+        const result = await this.cartService.applyCoupon(user.id, applyCouponDto.code);
+        return {
+            success: true,
+            message: 'Coupon applied successfully',
+            data: result,
+        };
+    }
+
+    
 
 }

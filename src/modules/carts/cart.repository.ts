@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
-import { User, Prisma } from '../../../generated/prisma/client'
+// import { User, Prisma } from '../../../generated/prisma'
 @Injectable()
 export class CartRepository {
   constructor(private prisma: DatabaseService) { }

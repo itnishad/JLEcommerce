@@ -12,7 +12,6 @@ export class CartService {
 
         //Get user cart
         let cart = await this.cartRepository.findCartByUserId(userId)
-
         //if cart not found then create a new cart
         if (!cart) {
             cart = await this.cartRepository.createCart(userId)
@@ -24,6 +23,10 @@ export class CartService {
 
     async addItem(userId: string, productId: string, quantity: number) {
         const product = await this.productRepository.findById(productId)
+
+        if(quantity <= 0){
+            throw new BadRequestException('Quantity must be greater than 0');
+        }
 
         if (!product) {
             throw new NotFoundException('Product not found')
@@ -42,7 +45,6 @@ export class CartService {
         if (!cart) {
             cart = await this.cartRepository.createCart(userId)
         }
-
         const cartItem = await this.cartRepository.addItemToCart(cart.id, productId, quantity, Number(product.price))
 
         await this.recalculateCartCoupons(cart.id)
@@ -51,7 +53,7 @@ export class CartService {
 
         const updatedCart = await this.cartRepository.findCartById(cart.id)
 
-        return this.formatCartResponse(updatedCart, userId)
+        return await this.formatCartResponse(updatedCart, userId)
     }
 
     async updateItem(userId: string, itemId: string, quantity: number) {
@@ -289,5 +291,29 @@ export class CartService {
         }
 
         return removeCoutpons
+    }
+
+    async  applyCoupon(userId: string, code: string) {
+        const cart = await this.cartRepository.findCartByUserId(userId);
+        if (!cart) {
+            throw new NotFoundException('Cart not found');
+        }
+
+        const coupon = await this.couponService.validateAndApplyCoupon(code, userId, cart)
+
+        const discountAmount = await this.calculateCouponDiscount(coupon, cart);
+
+        await this.cartRepository.addCouponToCart(cart.id, coupon.id, discountAmount, false)
+
+        const updatedCart = await this.cartRepository.findCartById(cart.id)
+
+        return {
+            coupon: {
+                id: coupon.id,
+                code: coupon.code,
+                discountAmount
+            },
+            cart: await this.formatCartResponse(updatedCart, userId)
+        }
     }
 }
