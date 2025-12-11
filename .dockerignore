@@ -1,0 +1,16 @@
+# Ignore Git-related files
+.git
+.gitignore
+
+# Ignore build artifacts and temporary files
+build/
+dist/
+*.log
+tmp/
+
+# Ignore development dependencies and node modules
+node_modules/
+
+# Exclude all markdown files except README.md
+*.md
+!README.md

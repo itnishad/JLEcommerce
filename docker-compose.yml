@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: ecommerce-postgres-dev
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ecommerce
+    ports:
+      - '2345:5432'
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    networks:
+      - ecommerce-dev-network
+  
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ecommerce-app-dev
+    ports:
+      - '8000:8000'
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/ecommerce
+      JWT_AUTH_SECRECT: 76fb2f049b31b13fc7b86646d234c919
+      PORT: 8000
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      - postgres
+    networks:
+      - ecommerce-dev-network
+    command: sh -c "npx prisma generate && npx prisma migrate dev && npm run start:dev"
+  
+volumes:
+  postgres_dev_data:
+    driver: local
+
+networks:
+  ecommerce-dev-network:
+    driver: bridge
