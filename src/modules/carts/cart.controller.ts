@@ -62,6 +62,8 @@ export class CartController {
         };
     }
 
-    
-
+    @Post('checkout')
+    async processCheckout(@requestWithUser() user: User) {
+        return this.cartService.processCheckout(user.id);
+    }
 }

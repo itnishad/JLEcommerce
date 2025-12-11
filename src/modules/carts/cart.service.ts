@@ -2,11 +2,11 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { CartRepository } from './cart.repository';
 import { ProductRepository } from '../products/product.repository';
 import { CouponService } from '../coupons/coupon.service';
-
+import { DatabaseService } from '../../database/database.service';
 
 @Injectable()
 export class CartService {
-    constructor(private cartRepository: CartRepository, private productRepository: ProductRepository, private couponService: CouponService) { }
+    constructor(private cartRepository: CartRepository, private productRepository: ProductRepository, private couponService: CouponService, private prisma: DatabaseService) { }
 
     async getCart(userId: string) {
 
@@ -24,7 +24,7 @@ export class CartService {
     async addItem(userId: string, productId: string, quantity: number) {
         const product = await this.productRepository.findById(productId)
 
-        if(quantity <= 0){
+        if (quantity <= 0) {
             throw new BadRequestException('Quantity must be greater than 0');
         }
 
@@ -293,7 +293,7 @@ export class CartService {
         return removeCoutpons
     }
 
-    async  applyCoupon(userId: string, code: string) {
+    async applyCoupon(userId: string, code: string) {
         const cart = await this.cartRepository.findCartByUserId(userId);
         if (!cart) {
             throw new NotFoundException('Cart not found');
@@ -315,5 +315,149 @@ export class CartService {
             },
             cart: await this.formatCartResponse(updatedCart, userId)
         }
+    }
+
+    async processCheckout(userId: string) {
+        return await this.prisma.$transaction(async (tx) => {
+            const cart = await tx.cart.findFirst({
+                where: {
+                    userId: userId,
+                    status: 'active'
+                },
+                include: {
+                    cartItems: {
+                        include: {
+                            product: true
+                        }
+                    },
+                    couponUsages: {
+                        include: {
+                            coupon: true
+                        }
+                    }
+                }
+            })
+
+            if (!cart) {
+                throw new NotFoundException('Active cart not found');
+            }
+
+            if (!cart.cartItems || cart.cartItems.length === 0) {
+                throw new NotFoundException('Cart is empty');
+            }
+
+            const processedCoupons: unknown[] = [];
+
+            for (const item of cart.cartItems) {
+                if (item.product.stockQuantity < item.quantity) {
+                    throw new BadRequestException(
+                        `Insufficient stock for ${item.product.name}. Available: ${item.product.stockQuantity}, Required: ${item.quantity}`,
+                    );
+                }
+                const cartCoupons = await tx.cartCoupon.findMany({
+                    where: {
+                        cartId: cart.id 
+                    },
+                    include: {
+                        coupon: true
+                    }
+                });
+
+                for (const cartCoupon of cartCoupons) {
+                const lockedCoupon = await tx.coupon.findUnique({
+                    where: { id: cartCoupon.coupon.id },
+                });
+
+                if (!lockedCoupon) {
+                    throw new BadRequestException(`Coupon ${cartCoupon.coupon.code} no longer exists`);
+                }
+
+                if (!lockedCoupon.isActive) {
+                    throw new BadRequestException(`Coupon ${cartCoupon.coupon.code} is no longer active`);
+                }
+
+                // Check if coupon has expired
+                const now = new Date();
+                if (now > lockedCoupon.expiryTime) {
+                    throw new BadRequestException(`Coupon ${cartCoupon.coupon.code} has expired`);
+                }
+
+                // Check max total uses (system-wide limit)
+                if (lockedCoupon.maxTotalUses &&
+                    lockedCoupon.currentTotalUses >= lockedCoupon.maxTotalUses) {
+                    throw new BadRequestException(
+                        `Coupon ${cartCoupon.coupon.code} has reached its usage limit`
+                    );
+                }
+
+                if (lockedCoupon.maxUsesPerUser) {
+                    const userUsageCount = await tx.couponUsage.count({
+                        where: {
+                            couponId: cartCoupon.coupon.id,
+                            userId,
+                        },
+                    });
+
+                    if (userUsageCount >= lockedCoupon.maxUsesPerUser) {
+                        throw new BadRequestException(
+                            `You have reached the usage limit for coupon ${cartCoupon.coupon.code}`
+                        );
+                    }
+                }
+                const rs = await tx.coupon.update({
+                    where: { id: cartCoupon.coupon.id },
+                    data: {
+                        currentTotalUses: {
+                            increment: 1,
+                        },
+                    },
+                });
+                const ps = await tx.couponUsage.create({
+                    data: {
+                        couponId: cartCoupon.coupon.id,
+                        userId,
+                        cartId: cart.id,
+                        discountAmount: cartCoupon.discountAmount,
+                    },
+                });
+
+                processedCoupons.push({
+                    code: cartCoupon.coupon.code,
+                    discountAmount: Number(cartCoupon.discountAmount),
+                });
+            }
+            }
+            for (const item of cart.cartItems) {
+                await tx.product.update({
+                    where: { id: item.productId },
+                    data: {
+                        stockQuantity: {
+                            decrement: item.quantity,
+                        },
+                    },
+                });
+            }
+
+            await tx.cart.update({
+                where: { id: cart.id },
+                data: {
+                    status: 'checked_out',
+                },
+                include: {
+                    cartItems: {
+                        include: {
+                            product: true,
+                        },
+                    },
+                },
+            });
+
+            await tx.cartCoupon.deleteMany({
+                where: { cartId: cart.id },
+            });
+
+            return 'Checkout successful';
+
+        }, { isolationLevel: 'Serializable', timeout: 15000 });
     }
 }

@@ -6,11 +6,10 @@ export class CartRepository {
   constructor(private prisma: DatabaseService) { }
 
   async findCartByUserId(userId: string) {
-    return this.prisma.cart.findUnique({
+    return this.prisma.cart.findFirst({
       where: {
-        userId_status: {
-          userId, status: 'active'
-        }
+        userId: userId,
+        status: 'active'
       },
       include: {
         cartItems: {
