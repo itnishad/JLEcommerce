@@ -97,3 +97,4 @@ With Mau, you can deploy your application in just a few clicks, allowing you to 
 ## License
 
 Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+Developed by: MD Faysal Hasan
